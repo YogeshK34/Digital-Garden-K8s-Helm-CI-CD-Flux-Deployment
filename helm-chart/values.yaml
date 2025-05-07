@@ -1,0 +1,17 @@
+appName: digital-garden
+
+container:
+  name: digital-garden
+  image: digital-garden:latest
+
+ports:
+  containerPort: 3000
+  port: 80
+  targetPort: 3000
+  nodePort: 30080
+
+serviceName: nextjs-service
+
+ingressName: nextjs-ingress
+rules:
+  host: digital-garden.com
