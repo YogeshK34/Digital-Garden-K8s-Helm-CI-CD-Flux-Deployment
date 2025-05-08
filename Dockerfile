@@ -1,67 +1,39 @@
-# Use Node.js LTS (Long Term Support) as the base image
-FROM node:20-alpine AS base
-
-# Install dependencies only when needed
-FROM base AS deps
+# Stage 1: Install dependencies
+FROM node:20-slim AS deps
 WORKDIR /app
 
-# Copy package.json and package-lock.json (or yarn.lock, pnpm-lock.yaml)
-COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
+# Copy only package files first to cache dependencies
+COPY package*.json ./
 
-# Install dependencies based on the preferred package manager
-RUN \
-  if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
-  elif [ -f package-lock.json ]; then npm i --legacy-peer-deps; \
-  elif [ -f pnpm-lock.yaml ]; then yarn global add pnpm && pnpm i --frozen-lockfile; \
-  else npm i --legacy-peer-deps; \
-  fi
-
-# Rebuild the source code only when needed
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
+# Install dependencies (handle peer deps safely)
 COPY . .
 
-# Next.js collects anonymous telemetry data about general usage.
-# Learn more here: https://nextjs.org/telemetry
-# Uncomment the following line to disable telemetry during the build.
-ENV NEXT_TELEMETRY_DISABLED 1
-
-# Build the application
-RUN npm run build
-
-# Production image, copy all the files and run next
-FROM base AS runner
+# Stage 2: Build app
+FROM node:20-slim AS builder
 WORKDIR /app
 
-ENV NODE_ENV production
-ENV NEXT_TELEMETRY_DISABLED 1
+# Copy deps from previous stage
+COPY --from=deps /app/node_modules ./node_modules
 
-# Create a non-root user to run the application
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# Copy source files
+COPY . .
 
-# Copy the necessary files from the builder stage
+# Build the app
+RUN npm run build
+
+# Stage 3: Run app
+FROM node:20-slim AS runner
+WORKDIR /app
+
+# Copy built app and node_modules
+COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/node_modules ./node_modules
 
-# Set the correct permission for prerender cache
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
+# Set environment variables if needed
+ENV PORT=3000
 
-# Automatically leverage output traces to reduce image size
-# https://nextjs.org/docs/advanced-features/output-file-tracing
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-# Switch to the non-root user
-USER nextjs
-
-# Expose the port the app will run on
+# Expose port and run
 EXPOSE 3000
-
-# Set the environment variable for the application to bind to all network interfaces
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
-
-# Start the application
-CMD ["node", "server.js"]
+CMD ["npm", "start"]
