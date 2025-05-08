@@ -10,8 +10,8 @@ ports:
   targetPort: 3000
   nodePort: 30080
 
-serviceName: nextjs-service
+serviceName: digital-garden-service
 
-ingressName: nextjs-ingress
+ingressName: digital-garden-ingress
 rules:
   host: digital-garden.com
